@@ -295,7 +295,11 @@ install_realm() {
             echo -e "${RED}✗ 下载失败${NC}"
             echo -e "${YELLOW}可用离线方式：在有浏览器的机器上下载 realm-${ARCH}.tar.gz 后，${NC}"
             echo -e "${YELLOW}把文件传到本机任意目录，重新运行安装脚本并在提示时填入该文件的完整路径。${NC}"
-            echo -e "${YELLOW}下载地址: ${DOWNLOAD_URL}${NC}"
+            if [ -n "$GH_PROXY" ]; then
+                echo -e "${YELLOW}手动下载(国内可用)： curl -L \"${GH_PROXY}${DOWNLOAD_URL}\" -o realm.tar.gz${NC}"
+            else
+                echo -e "${YELLOW}下载地址: ${DOWNLOAD_URL}${NC}"
+            fi
             exit 1
         fi
     fi
@@ -885,7 +889,7 @@ smart_install() {
     # 脚本更新（首次安装跳过，菜单进入则检查版本）
     if [ "${_SKIP_SCRIPT_UPDATE:-}" != "1" ]; then
         echo -e "${YELLOW}正在检查脚本更新...${NC}"
-        local remote_ver=$(gh_fetch "https://raw.githubusercontent.com/zywe03/realm-xwPF/main/lib/core.sh" 2>/dev/null | \
+        local remote_ver=$(gh_fetch "${REPO_RAW_URL}/lib/core.sh" 2>/dev/null | \
             grep -E '^SCRIPT_VERSION=' | head -1 | cut -d'"' -f2)
 
         if [ -n "$remote_ver" ] && [ "$remote_ver" != "$SCRIPT_VERSION" ]; then

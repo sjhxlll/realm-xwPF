@@ -82,13 +82,13 @@ Completed: 2025-08-28 20:12:29 | Source: https://github.com/zywe03/realm-xwPF
 ### One-Click Install
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh | sudo bash -s install
+wget -qO- https://raw.githubusercontent.com/sjhxlll/realm-xwPF/main/xwPF.sh | sudo bash -s install
 ```
 
 ### Behind a Restricted Network? Use an Accelerated Mirror
 
 ```bash
-wget -qO- https://v6.gh-proxy.org/https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh | sudo bash -s install
+wget -qO- https://v6.gh-proxy.org/https://raw.githubusercontent.com/sjhxlll/realm-xwPF/main/xwPF.sh | sudo bash -s install
 ```
 If the mirror is down, retry a few times or switch to another proxy with built-in acceleration.
 
@@ -103,8 +103,8 @@ For servers with absolutely no network connectivity.
 
 **1. Download the following files on a machine that does have internet access**
 
-- **Main script**: [xwPF.sh](https://github.com/zywe03/realm-xwPF/raw/main/xwPF.sh)
-- **Module files** (all required): https://github.com/zywe03/realm-xwPF/tree/main/lib
+- **Main script**: [xwPF.sh](https://github.com/sjhxlll/realm-xwPF/raw/main/xwPF.sh)
+- **Module files** (all required): https://github.com/sjhxlll/realm-xwPF/tree/main/lib
 
 - **Realm binary** (pick the one matching your architecture):
 

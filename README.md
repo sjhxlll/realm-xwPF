@@ -92,11 +92,21 @@ wget -qO- https://v6.gh-proxy.org/https://raw.githubusercontent.com/sjhxlll/real
 ```
 若加速源失效，可多次重试或更换其他具有内置加速功能的代理源
 
-> 说明：v2.3.4 起脚本已内置加速源自动回退——安装 realm、拉取脚本更新等操作在直连 GitHub 超时后，会自动改用 `https://v6.gh-proxy.org/` 加速源重试，无需手动拼接代理地址。如需更换或关闭加速源，运行前设置环境变量即可：
+> 说明：v2.3.5 起，脚本内部所有 GitHub 访问（下载 realm 主程序、拉取脚本更新、获取版本号）默认**优先走加速源**，直连仅作为最后的兜底；主源不可用时会依次自动切换到备用加速源，无需手动拼接代理地址。可用环境变量：
 >
 > ```bash
-> GH_PROXY="https://your.proxy/" sudo -E bash xwPF.sh   # 更换加速源
-> GH_PROXY=""        sudo -E bash xwPF.sh               # 关闭加速，仅直连
+> GH_PROXY="https://gh-proxy.com/"  sudo -E bash xwPF.sh   # 更换主加速源
+> GH_PROXY_MIRRORS="https://ghfast.top/,https://ghproxy.net/"  sudo -E bash xwPF.sh   # 更换备用加速源列表
+> GH_PROXY_DIRECT_FIRST=1           sudo -E bash xwPF.sh   # 海外机器：先直连，超时再走加速源
+> GH_PROXY=""                       sudo -E bash xwPF.sh   # 完全关闭加速，仅直连
+> ```
+>
+> 内置候选源（2026-10 实测可转发 `raw` / `api` / `releases` 下载）：`v6.gh-proxy.org`、`gh-proxy.com`、`ghfast.top`、`ghproxy.net`。
+>
+> 若只想先把 realm 主程序拉下来，可直接用加速源手动下载后走离线安装：
+>
+> ```bash
+> curl -L "https://v6.gh-proxy.org/https://github.com/zhboner/realm/releases/download/v2.9.6/realm-x86_64-unknown-linux-musl.tar.gz" -o realm.tar.gz
 > ```
 
 ## 无法联网的离线安装
@@ -108,16 +118,16 @@ wget -qO- https://v6.gh-proxy.org/https://raw.githubusercontent.com/sjhxlll/real
 
 **1. 在有网络的设备上下载以下文件**
 
-- **主脚本**：[xwPF.sh](https://github.com/zywe03/realm-xwPF/raw/main/xwPF.sh)
-- **模块文件**（全部需要）：https://github.com/zywe03/realm-xwPF/tree/main/lib
+- **主脚本**：[xwPF.sh](https://github.com/sjhxlll/realm-xwPF/raw/main/xwPF.sh)
+- **模块文件**（全部需要）：https://github.com/sjhxlll/realm-xwPF/tree/main/lib
 
 - **Realm 程序**（根据系统架构选择）：
 
 | 架构 | 适用系统 | 下载链接 | 检测命令 |
 |------|----------|----------|----------|
-| x86_64 | 常见64位系统 | [realm-x86_64-unknown-linux-gnu.tar.gz](https://github.com/zhboner/realm/releases/latest) | `uname -m` 显示 `x86_64` |
-| aarch64 | ARM64系统 | [realm-aarch64-unknown-linux-gnu.tar.gz](https://github.com/zhboner/realm/releases/latest) | `uname -m` 显示 `aarch64` |
-| armv7 | ARM32系统（如树莓派） | [realm-armv7-unknown-linux-gnueabihf.tar.gz](https://github.com/zhboner/realm/releases/latest) | `uname -m` 显示 `armv7l` 或 `armv6l` |
+| x86_64 | 常见64位系统 | [realm-x86_64-unknown-linux-musl.tar.gz](https://github.com/zhboner/realm/releases/latest) | `uname -m` 显示 `x86_64` |
+| aarch64 | ARM64系统 | [realm-aarch64-unknown-linux-musl.tar.gz](https://github.com/zhboner/realm/releases/latest) | `uname -m` 显示 `aarch64` |
+| armv7 | ARM32系统（如树莓派） | [realm-armv7-unknown-linux-musleabihf.tar.gz](https://github.com/zhboner/realm/releases/latest) | `uname -m` 显示 `armv7l` 或 `armv6l` |
 
 **2. 将文件放置到目标服务器**
 

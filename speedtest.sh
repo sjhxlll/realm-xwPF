@@ -45,28 +45,42 @@ cleanup_on_exit() {
     echo -e "\n${YELLOW}脚本已退出，清理完成${NC}"
 }
 
-# 统一下载函数：直连失败自动回退 GitHub 加速源
+# 统一下载函数：国内直连常超时，加速源在前、直连兜底
 GH_PROXY="${GH_PROXY:-https://v6.gh-proxy.org/}"
+GH_PROXY_MIRRORS="${GH_PROXY_MIRRORS:-https://v6.gh-proxy.org/,https://gh-proxy.com/,https://ghfast.top/,https://ghproxy.net/}"
+GH_PROXY_DIRECT_FIRST="${GH_PROXY_DIRECT_FIRST:-0}"
+REPO_RAW_URL="${REPO_RAW_URL:-https://raw.githubusercontent.com/sjhxlll/realm-xwPF/main}"
 
 gh_candidates() {
-    local url="$1"
+    local url="$1" prefix
     case "$url" in
         https://github.com/*|https://raw.githubusercontent.com/*|https://api.github.com/*)
+            [ "$GH_PROXY_DIRECT_FIRST" = "1" ] && printf '%s\n' "$url"
             if [ -n "$GH_PROXY" ]; then
-                printf '%s\n%s\n' "$url" "${GH_PROXY}${url}"
-                return 0
+                printf '%s\n' "${GH_PROXY}${url}"
+                local -a _mirrors=()
+                IFS=',' read -ra _mirrors <<< "$GH_PROXY_MIRRORS"
+                for prefix in "${_mirrors[@]}"; do
+                    prefix="${prefix//[[:space:]]/}"
+                    [ -z "$prefix" ] && continue
+                    [ "$prefix" = "$GH_PROXY" ] && continue
+                    printf '%s\n' "${prefix}${url}"
+                done
             fi
+            [ "$GH_PROXY_DIRECT_FIRST" = "1" ] || printf '%s\n' "$url"
+            return 0
             ;;
     esac
     printf '%s\n' "$url"
 }
 
 gh_fetch() {
-    local url="$1" cand
+    local url="$1" cand body
     while IFS= read -r cand; do
-        if curl -fsL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $SHORT_MAX_TIMEOUT "$cand" 2>/dev/null; then
-            return 0
-        fi
+        body=$(curl -fsL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $SHORT_MAX_TIMEOUT "$cand" 2>/dev/null) || continue
+        [ -n "$body" ] || continue
+        printf '%s' "$body"
+        return 0
     done < <(gh_candidates "$url")
     return 1
 }
@@ -77,10 +91,11 @@ download_from_sources() {
 
     local cand
     while IFS= read -r cand; do
-        if curl -fsSL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $SHORT_MAX_TIMEOUT "$cand" -o "$target_path"; then
+        if curl -fsSL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $LONG_MAX_TIMEOUT "$cand" -o "$target_path" && [ -s "$target_path" ]; then
             echo -e "${GREEN}✓ 下载成功${NC}" >&2
             return 0
         fi
+        rm -f "$target_path"
     done < <(gh_candidates "$url")
 
     echo -e "${RED}✗ 下载失败${NC}" >&2
@@ -1535,7 +1550,7 @@ show_main_menu() {
 manual_update_script() {
     echo -e "${YELLOW}正在检查脚本更新...${NC}"
 
-    local script_url="https://raw.githubusercontent.com/zywe03/realm-xwPF/main/speedtest.sh"
+    local script_url="${REPO_RAW_URL}/speedtest.sh"
     local remote_ver=$(gh_fetch "$script_url" 2>/dev/null |         grep -E '^SCRIPT_VERSION=' | head -1 | cut -d'"' -f2)
 
     if [ -z "$remote_ver" ]; then

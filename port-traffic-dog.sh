@@ -20,20 +20,33 @@ readonly GREEN='\033[0;32m'
 readonly NC='\033[0m'
 readonly SHORT_CONNECT_TIMEOUT=5
 readonly SHORT_MAX_TIMEOUT=7
-readonly SCRIPT_URL="https://raw.githubusercontent.com/zywe03/realm-xwPF/main/port-traffic-dog.sh"
+readonly REPO_RAW_URL="${REPO_RAW_URL:-https://raw.githubusercontent.com/sjhxlll/realm-xwPF/main}"
+readonly SCRIPT_URL="${REPO_RAW_URL}/port-traffic-dog.sh"
 readonly SHORTCUT_COMMAND="dog"
-# GitHub 加速源：直连失败时自动用前缀重试（设为空字符串可关闭）
+# GitHub 加速源：国内直连常超时，默认加速源在前、直连兜底（设为空字符串可关闭）
 readonly GH_PROXY="${GH_PROXY:-https://v6.gh-proxy.org/}"
+readonly GH_PROXY_MIRRORS="${GH_PROXY_MIRRORS:-https://v6.gh-proxy.org/,https://gh-proxy.com/,https://ghfast.top/,https://ghproxy.net/}"
+readonly GH_PROXY_DIRECT_FIRST="${GH_PROXY_DIRECT_FIRST:-0}"
 
-# 生成候选 URL：原地址在前，加速源地址在后
+# 生成候选 URL：加速源在前，直连在后
 gh_candidates() {
-    local url="$1"
+    local url="$1" prefix
     case "$url" in
-        https://github.com/*|https://raw.githubusercontent.com/*|https://api.github.com/*|https://codeload.github.com/*)
+        https://github.com/*|https://raw.githubusercontent.com/*|https://api.github.com/*|https://codeload.github.com/*|https://objects.githubusercontent.com/*)
+            [ "$GH_PROXY_DIRECT_FIRST" = "1" ] && printf '%s\n' "$url"
             if [ -n "$GH_PROXY" ]; then
-                printf '%s\n%s\n' "$url" "${GH_PROXY}${url}"
-                return 0
+                printf '%s\n' "${GH_PROXY}${url}"
+                local -a _mirrors=()
+                IFS=',' read -ra _mirrors <<< "$GH_PROXY_MIRRORS"
+                for prefix in "${_mirrors[@]}"; do
+                    prefix="${prefix//[[:space:]]/}"
+                    [ -z "$prefix" ] && continue
+                    [ "$prefix" = "$GH_PROXY" ] && continue
+                    printf '%s\n' "${prefix}${url}"
+                done
             fi
+            [ "$GH_PROXY_DIRECT_FIRST" = "1" ] || printf '%s\n' "$url"
+            return 0
             ;;
     esac
     printf '%s\n' "$url"
@@ -3532,16 +3545,18 @@ import_config() {
 download_with_sources() {
     local url=$1
     local output_file=$2
+    local max_time=${3:-$SHORT_MAX_TIMEOUT}
     local cand
 
-    # 直连失败自动回退 GitHub 加速源
+    # 逐个加速源尝试（加速源在前，直连兜底）
     while IFS= read -r cand; do
-        if curl -fsSL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $SHORT_MAX_TIMEOUT "$cand" -o "$output_file" 2>/dev/null; then
+        if curl -fsSL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time "$max_time" "$cand" -o "$output_file" 2>/dev/null; then
             if [ -s "$output_file" ]; then
                 echo -e "${GREEN}下载成功${NC}"
                 return 0
             fi
         fi
+        rm -f "$output_file"
     done < <(gh_candidates "$url")
 
     echo -e "${RED}下载失败${NC}"
@@ -3563,9 +3578,10 @@ gh_fetch_text() {
 download_notification_modules() {
     local notifications_dir="$CONFIG_DIR/notifications"
     local temp_dir=$(mktemp -d)
-    local repo_url="https://github.com/zywe03/realm-xwPF/archive/refs/heads/main.zip"
+    local repo_url="https://github.com/sjhxlll/realm-xwPF/archive/refs/heads/main.zip"
 
-    if download_with_sources "$repo_url" "$temp_dir/repo.zip" &&
+    # 仓库压缩包约 1MB+，7 秒上限偏紧，放宽到 60 秒
+    if download_with_sources "$repo_url" "$temp_dir/repo.zip" 60 &&
        (cd "$temp_dir" && unzip -q repo.zip) &&
        rm -rf "$notifications_dir" &&
        cp -r "$temp_dir/realm-xwPF-main/notifications" "$notifications_dir" &&

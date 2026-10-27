@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="v2.3.4"
+SCRIPT_VERSION="v2.3.5"
 REALM_VERSION="v2.9.6"
 
 NAT_LISTEN_PORT=""
@@ -87,21 +87,41 @@ SHORT_MAX_TIMEOUT=7
 LONG_CONNECT_TIMEOUT=15
 LONG_MAX_TIMEOUT=120
 
-# ---- GitHub 访问加速 ----
-# 国内环境直连 github.com / raw.githubusercontent.com / api.github.com 常超时。
-# 直连失败时自动回退到加速源（把加速源前缀拼在原 URL 前面）。
-# 可覆盖：GH_PROXY="" 关闭加速；GH_PROXY="https://your.proxy/" 换加速源。
+# GitHub 访问加速
+# 国内环境直连 github.com / raw.githubusercontent.com / api.github.com 常超时或被重置。
+# 默认把加速源排在前面，直连仅作为最后的兜底（海外机器可 GH_PROXY_DIRECT_FIRST=1 反过来）。
+# 可覆盖：GH_PROXY="" 只用直连；GH_PROXY="https://your.proxy/" 换主加速源；
+#        GH_PROXY_MIRRORS="a,b" 换备用加速源列表。
 GH_PROXY="${GH_PROXY:-https://v6.gh-proxy.org/}"
 
-# 生成候选 URL：原地址在前，加速源地址在后
+# 候选加速源（逗号分隔，均已在 2026-10 实测可转发 raw / api / releases 下载）
+GH_PROXY_MIRRORS="${GH_PROXY_MIRRORS:-https://v6.gh-proxy.org/,https://gh-proxy.com/,https://ghfast.top/,https://ghproxy.net/}"
+
+# =1 时先试直连再走加速源
+GH_PROXY_DIRECT_FIRST="${GH_PROXY_DIRECT_FIRST:-0}"
+
+# 仓库源地址（本 fork）。必须与 xwPF.sh 一致，否则自更新会拿回上游旧文件。
+REPO_RAW_URL="${REPO_RAW_URL:-https://raw.githubusercontent.com/sjhxlll/realm-xwPF/main}"
+
+# 生成候选 URL：加速源在前，直连在后
 gh_candidates() {
-    local url="$1"
+    local url="$1" prefix
     case "$url" in
         https://github.com/*|https://raw.githubusercontent.com/*|https://api.github.com/*|https://codeload.github.com/*|https://objects.githubusercontent.com/*)
+            [ "$GH_PROXY_DIRECT_FIRST" = "1" ] && printf '%s\n' "$url"
             if [ -n "$GH_PROXY" ]; then
-                printf '%s\n%s\n' "$url" "${GH_PROXY}${url}"
-                return 0
+                printf '%s\n' "${GH_PROXY}${url}"
+                local -a _mirrors=()
+                IFS=',' read -ra _mirrors <<< "$GH_PROXY_MIRRORS"
+                for prefix in "${_mirrors[@]}"; do
+                    prefix="${prefix//[[:space:]]/}"
+                    [ -z "$prefix" ] && continue
+                    [ "$prefix" = "$GH_PROXY" ] && continue
+                    printf '%s\n' "${prefix}${url}"
+                done
             fi
+            [ "$GH_PROXY_DIRECT_FIRST" = "1" ] || printf '%s\n' "$url"
+            return 0
             ;;
     esac
     printf '%s\n' "$url"
@@ -115,12 +135,13 @@ gh_download() {
     local cand
     while IFS= read -r cand; do
         if [ "$#" -gt 0 ]; then
-            if "$@" "$cand" -o "$target"; then return 0; fi
+            if "$@" "$cand" -o "$target" && [ -s "$target" ]; then return 0; fi
         else
-            if curl -fL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $SHORT_MAX_TIMEOUT "$cand" -o "$target"; then
+            if curl -fL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $SHORT_MAX_TIMEOUT "$cand" -o "$target" && [ -s "$target" ]; then
                 return 0
             fi
         fi
+        rm -f "$target"
     done < <(gh_candidates "$url")
     return 1
 }
@@ -128,11 +149,13 @@ gh_download() {
 # 多源抓取文本（输出到标准输出，不落盘）：逐个候选地址尝试
 # 用法: gh_fetch <url>
 gh_fetch() {
-    local url="$1" cand
+    local url="$1" cand body
     while IFS= read -r cand; do
-        if curl -fsL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $SHORT_MAX_TIMEOUT "$cand" 2>/dev/null; then
-            return 0
-        fi
+        body=$(curl -fsL --connect-timeout $SHORT_CONNECT_TIMEOUT --max-time $SHORT_MAX_TIMEOUT "$cand" 2>/dev/null) || continue
+        # 加速源偶尔 200 返回空页或 HTML 错误页，避免被当成有效内容解析
+        [ -n "$body" ] || continue
+        printf '%s' "$body"
+        return 0
     done < <(gh_candidates "$url")
     return 1
 }
@@ -259,9 +282,9 @@ manage_dependencies() {
         if [ "$mode" = "check" ]; then
             echo -e "${RED}错误: 缺少必备工具: ${missing_tools[*]}${NC}"
             echo -e "${YELLOW}请先选择菜单选项1进行安装，或手动运行安装命令:${NC}"
-            echo -e "${BLUE}wget -qO- https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh | sudo bash -s install${NC}"
-            echo -e "${YELLOW}国内网络可改用加速源:${NC}"
-            echo -e "${BLUE}wget -qO- https://v6.gh-proxy.org/https://raw.githubusercontent.com/zywe03/realm-xwPF/main/xwPF.sh | sudo bash -s install${NC}"
+            echo -e "${BLUE}wget -qO- ${REPO_RAW_URL}/xwPF.sh | sudo bash -s install${NC}"
+            echo -e "${YELLOW}国内网络直连超时，请用加速源:${NC}"
+            echo -e "${BLUE}wget -qO- ${GH_PROXY}${REPO_RAW_URL}/xwPF.sh | sudo bash -s install${NC}"
             exit 1
         elif [ "$mode" = "install" ]; then
             echo -e "${YELLOW}需要安装以下工具: ${missing_tools[*]}${NC}"
